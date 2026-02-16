@@ -2,3 +2,5 @@
 .venv
 .cursor
 .pytest_cache
+build/
+uv.lock
