@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clinical Trial Simulator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <style>
+    :root { --bg: #0f1419; --surface: #1a2332; --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --danger: #f85149; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1rem 2rem; max-width: 900px; margin-left: auto; margin-right: auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+    section { background: var(--surface); border-radius: 8px; padding: 1rem 1.5rem; margin-bottom: 1rem; }
+    section h2 { font-size: 1rem; margin: 0 0 0.75rem; color: var(--muted); }
+    label { display: block; margin-bottom: 0.25rem; color: var(--muted); font-size: 0.875rem; }
+    input, select, button, textarea { padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid #30363d; background: var(--bg); color: var(--text); }
+    textarea { width: 100%; min-height: 100px; resize: vertical; margin-bottom: 0.5rem; }
+    button { margin-right: 0.5rem; margin-bottom: 0.5rem; cursor: pointer; border: none; }
+    .btn-primary { background: var(--accent); color: var(--bg); }
+    .btn-secondary { background: #30363d; color: var(--text); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button:hover:not(:disabled) { filter: brightness(1.1); }
+    .form-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end; }
+    #status { margin-top: 0.5rem; font-size: 0.875rem; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #30363d; }
+    th { color: var(--muted); }
+    .trace { font-size: 0.75rem; color: var(--muted); max-width: 60ch; white-space: pre-wrap; word-break: break-word; }
+    .outlier-row { background: rgba(248,81,73,0.08); }
+    #chartWrap { max-width: 600px; height: 280px; margin-top: 0.5rem; }
+    .summary-stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .summary-stats span { color: var(--muted); }
+    .summary-stats strong { color: var(--danger); }
+    .summary-text { line-height: 1.6; margin: 0.5rem 0; }
+    .summary-text h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.75rem; color: var(--text); border-bottom: 1px solid #30363d; padding-bottom: 0.35rem; }
+    .summary-text h2 { font-size: 1.1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; color: var(--accent); }
+    .summary-text h3 { font-size: 1rem; margin: 1rem 0 0.5rem; color: var(--accent); }
+    .summary-text p { margin: 0.5rem 0; }
+    .summary-text table { margin: 0.75rem 0; border-collapse: collapse; width: auto; }
+    .summary-text table th, .summary-text table td { padding: 0.4rem 0.75rem; border: 1px solid #30363d; text-align: left; }
+    .summary-text table th { color: var(--muted); font-weight: 600; }
+    .summary-text pre { overflow-x: auto; padding: 0.75rem; background: var(--bg); border-radius: 6px; font-size: 0.8rem; }
+    .summary-text .mermaid { margin: 1rem 0; min-height: 200px; }
+    .summary-visual { margin-top: 1.25rem; }
+    .summary-visual h3 { font-size: 1rem; margin: 1rem 0 0.5rem; color: var(--accent); }
+    .summary-visual .mermaid { margin: 0.75rem 0; min-height: 180px; }
+    .summary-visual .chart-legend { font-size: 0.875rem; color: var(--muted); margin: 0.25rem 0 0.5rem; }
+    .params-used { font-size: 0.875rem; color: var(--muted); margin: 0.5rem 0; }
+    .toggle-section { margin-top: 0.75rem; }
+    .toggle-section summary { cursor: pointer; color: var(--accent); }
+    .step-display { display: flex; align-items: center; gap: 0.75rem; margin: 0.75rem 0; padding: 0.75rem; background: rgba(88,166,255,0.08); border-radius: 6px; }
+    .step-display .spinner { width: 20px; height: 20px; border: 2px solid var(--muted); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .step-display .step-text { color: var(--text); font-size: 0.9375rem; }
+    .example-queries { margin-bottom: 0.75rem; }
+    .example-queries span { font-size: 0.8125rem; color: var(--muted); display: block; margin-bottom: 0.5rem; }
+    .example-queries .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .example-queries .chip { font-size: 0.8125rem; padding: 0.35rem 0.65rem; border-radius: 999px; border: 1px solid #30363d; background: var(--bg); color: var(--muted); cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+    .example-queries .chip:hover { border-color: var(--accent); color: var(--accent); }
+  </style>
+</head>
+<body>
+  <h1>Clinical Trial Simulator</h1>
+
+  <section>
+    <h2>Describe your trial goal</h2>
+    <p style="color: var(--muted); font-size: 0.875rem; margin-bottom: 0.5rem;">The LLM will turn this into trial parameters and run the orchestrator (cohort → PK simulation → Safety Auditor).</p>
+    <div class="example-queries">
+      <span>Example goals (click to fill):</span>
+      <div class="chips">
+        <button type="button" class="chip" data-goal="Test 50mg Warfarin on 50 elderly patients with varying CYP2C9. Flag C_max above 3 mg/L.">50 patients, CYP2C9, Cmax 3 mg/L</button>
+        <button type="button" class="chip" data-goal="Stress-test warfarin in 100 patients: include 20% Poor Metabolizers and 10% CKD stage 4. Use 5 mg/L as toxicity threshold.">Stress-test (PM + CKD)</button>
+        <button type="button" class="chip" data-goal="Run a standard warfarin trial: 50 mg every 24 hours, 30 patients, flag C_max above 3 mg/L.">Standard 30-patient trial</button>
+        <button type="button" class="chip" data-goal="Simulate 80 patients on warfarin 25 mg twice daily. Include diverse CYP2C9 genotypes. Flag anyone above 4 mg/L.">80 pts, 25mg BID, threshold 4</button>
+      </div>
+    </div>
+    <textarea id="goalPrompt" placeholder="e.g. Test 50mg Warfarin on 100 elderly patients with varying CYP2C9 genotypes. Flag anyone with C_max above 3 mg/L."></textarea>
+    <div>
+      <button id="runFromGoalBtn" class="btn-primary">Run trial from goal</button>
+    </div>
+    <div id="stepDisplay" class="step-display" style="display: none;">
+      <div class="spinner"></div>
+      <span class="step-text" id="stepText"></span>
+    </div>
+    <div id="status"></div>
+  </section>
+
+  <section id="paramsSection" style="display: none;">
+    <h2>Params used</h2>
+    <div id="paramsUsed" class="params-used"></div>
+    <div id="paramsReasoning" class="trace" style="margin-top: 0.5rem;"></div>
+  </section>
+
+  <section id="summarySection" style="display: none;">
+    <h2>Summary</h2>
+    <div id="summaryText" class="summary-text"></div>
+    <div id="summaryVisual" class="summary-visual"></div>
+  </section>
+
+  <section id="resultsSection" style="display: none;">
+    <h2>Results overview</h2>
+    <div class="summary-stats" id="summaryStats"></div>
+    <div id="chartWrap"><canvas id="pkChart"></canvas></div>
+  </section>
+
+  <section id="outliersSection" style="display: none;">
+    <h2>Outliers (Safety flags)</h2>
+    <table id="outliersTable">
+      <thead><tr><th>Patient ID</th><th>C_max (mg/L)</th><th>Param trace</th></tr></thead>
+      <tbody id="outliersBody"></tbody>
+    </table>
+  </section>
+
+  <section id="tracesSection" style="display: none;">
+    <h2>Reasoning traces (sample)</h2>
+    <div id="tracesContent" class="trace"></div>
+  </section>
+
+  <section class="toggle-section">
+    <details>
+      <summary>Manual config (run without LLM)</summary>
+      <div style="margin-top: 1rem;">
+        <div class="form-row">
+          <div><label>Drug</label><input type="text" id="drug" value="warfarin" /></div>
+          <div><label>Dose (mg)</label><input type="number" id="dose_mg" value="50" min="0.1" step="0.1" /></div>
+          <div><label>Cohort size</label><input type="number" id="cohort_size" value="30" min="1" max="500" /></div>
+          <div><label>Frequency</label><input type="text" id="frequency" value="every 24 hours" /></div>
+          <div><label>C_max threshold (mg/L)</label><input type="number" id="threshold" value="3" min="0" step="0.1" /></div>
+          <div style="align-self: flex-end;"><button id="runManualBtn" class="btn-secondary">Run trial (manual)</button></div>
+        </div>
+        <div id="manualStatus" style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--muted);"></div>
+      </div>
+    </details>
+  </section>
+
+  <script>
+    const API_BASE = window.location.port === '5173' || window.location.port === '3000'
+      ? 'http://localhost:8000'
+      : '';
+
+    let pkChart = null;
+
+    document.querySelectorAll('.example-queries .chip').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var goal = this.getAttribute('data-goal');
+        if (goal) document.getElementById('goalPrompt').value = goal;
+      });
+    });
+
+    function showStatus(msg, isError) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+    }
+
+    function showParams(params, reasoning) {
+      document.getElementById('paramsSection').style.display = 'block';
+      const parts = params ? ['drug: ' + params.drug, 'dose_mg: ' + params.dose_mg, 'cohort_size: ' + params.cohort_size, 'frequency: ' + params.frequency, 'c_max_threshold_mg_L: ' + params.c_max_threshold_mg_L] : [];
+      if (params && params.cohort_distribution) parts.push('cohort: ' + params.cohort_distribution);
+      document.getElementById('paramsUsed').textContent = parts.join('  ·  ') || '';
+      document.getElementById('paramsReasoning').textContent = reasoning || '';
+    }
+
+    function markdownToHtml(md) {
+      if (!md || typeof md !== 'string') return '';
+      var s = md.trim();
+      var m = (typeof marked !== 'undefined' ? marked : null) || (typeof window !== 'undefined' && window.marked) || null;
+      if (m && (m.parse || (m.default && m.default.parse))) {
+        try {
+          var parseFn = m.parse || m.default.parse;
+          var Renderer = m.Renderer || (m.default && m.default.Renderer);
+          var useOpts = { gfm: true, breaks: true };
+          if (Renderer) {
+            var renderer = new Renderer();
+            renderer.code = function(code, language) {
+              if (language === 'mermaid') return '<div class="mermaid">' + code.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
+              return '<pre><code>' + code.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</code></pre>';
+            };
+            useOpts.renderer = renderer;
+          }
+          if (m.use) m.use(useOpts);
+          else if (m.setOptions) m.setOptions(useOpts);
+          var out = parseFn.call(m, s);
+          if (out && typeof out === 'string') {
+            if (out.indexOf('<h1') !== -1 || out.indexOf('<h2') !== -1) return out;
+            var fixed = out.replace(/^(# )(.+)$/gm, '<h1>$2</h1>').replace(/^(## )(.+)$/gm, '<h2>$2</h2>').replace(/^(### )(.+)$/gm, '<h3>$2</h3>');
+            if (fixed !== out) return fixed;
+            return out;
+          }
+        } catch (_) {}
+      }
+      var html = s
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      html = html.split(/\n\n+/).map(function(block) {
+        if (/^<h[1-3]>/.test(block)) return block;
+        return '<p>' + block.replace(/\n/g, '<br>\n') + '</p>';
+      }).join('\n');
+      return html;
+    }
+
+    function showSummary(text) {
+      const el = document.getElementById('summaryText');
+      const section = document.getElementById('summarySection');
+      section.style.display = 'block';
+      var s = (text != null && text !== undefined) ? String(text).trim() : '';
+      var visualEl = document.getElementById('summaryVisual');
+      if (!s) { el.textContent = ''; el.innerHTML = ''; if (visualEl) visualEl.innerHTML = ''; return; }
+      try {
+        el.innerHTML = markdownToHtml(s);
+        if (typeof mermaid !== 'undefined') {
+          mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+          el.querySelectorAll('.mermaid').forEach(function(node, i) {
+            const code = node.textContent;
+            node.innerHTML = '';
+            mermaid.render('mermaid-' + i, code).then(function({ svg }) { node.innerHTML = svg; }).catch(function() { node.textContent = code; });
+          });
+        }
+      } catch (err) {
+        el.textContent = s;
+      }
+    }
+
+    let pollInterval = null;
+
+    document.getElementById('runFromGoalBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('runFromGoalBtn');
+      const goal = document.getElementById('goalPrompt').value.trim()
+        || 'Test 50mg Warfarin on 50 elderly patients with varying CYP2C9. Flag C_max above 3 mg/L.';
+      btn.disabled = true;
+      document.getElementById('stepDisplay').style.display = 'flex';
+      document.getElementById('stepText').textContent = 'Starting…';
+      showStatus('');
+      try {
+        const res = await fetch(API_BASE + '/run_trial_from_goal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ goal }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        pollInterval = setInterval(async () => {
+          try {
+            const st = await fetch(API_BASE + '/run_trial_status').then(r => r.json());
+            document.getElementById('stepText').textContent = st.step || st.status;
+            if (st.status === 'done') {
+              clearInterval(pollInterval);
+              pollInterval = null;
+              document.getElementById('stepDisplay').style.display = 'none';
+              const data = st.result || {};
+              const result = data.result || {};
+              var summary = (st.summary != null && st.summary !== undefined) ? String(st.summary).trim() : '';
+              if (!summary && (data.summary != null && data.summary !== undefined)) summary = String(data.summary).trim();
+              if (!summary && result.num_outliers != null) {
+                summary = 'Trial completed with ' + (result.num_outliers || 0) + ' outlier(s). Summary text was not returned.';
+              }
+              showParams(data.params_used, data.params_reasoning);
+              showSummary(summary);
+              renderResults(result);
+              renderSummaryVisual(result);
+              if (result.error) showStatus(result.error, true);
+              else showStatus('Done. ' + (result.num_outliers || 0) + ' outlier(s).');
+              btn.disabled = false;
+            } else if (st.status === 'error') {
+              clearInterval(pollInterval);
+              pollInterval = null;
+              document.getElementById('stepDisplay').style.display = 'none';
+              showStatus('Error: ' + (st.error || 'Unknown'), true);
+              btn.disabled = false;
+            }
+          } catch (_) {}
+        }, 1000);
+      } catch (e) {
+        document.getElementById('stepDisplay').style.display = 'none';
+        showStatus('Error: ' + e.message, true);
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('runManualBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('runManualBtn');
+      const manualStatus = document.getElementById('manualStatus');
+      btn.disabled = true;
+      manualStatus.textContent = 'Running trial…';
+      try {
+        const res = await fetch(API_BASE + '/run_trial', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            drug: document.getElementById('drug').value,
+            dose_mg: parseFloat(document.getElementById('dose_mg').value),
+            cohort_size: parseInt(document.getElementById('cohort_size').value, 10),
+            frequency: document.getElementById('frequency').value,
+            c_max_threshold_mg_L: parseFloat(document.getElementById('threshold').value),
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        showParams(null, null);
+        document.getElementById('paramsSection').style.display = 'none';
+        showSummary('');
+        document.getElementById('summarySection').style.display = 'none';
+        renderResults(data);
+        renderSummaryVisual(data);
+        manualStatus.textContent = 'Done. ' + (data.num_outliers || 0) + ' outlier(s).';
+      } catch (e) {
+        manualStatus.textContent = 'Error: ' + e.message;
+        manualStatus.style.color = 'var(--danger)';
+      }
+      btn.disabled = false;
+    });
+
+    function sampleArray(arr, maxPoints) {
+      if (!arr || arr.length <= maxPoints) return arr || [];
+      var step = (arr.length - 1) / Math.max(1, maxPoints - 1);
+      var out = [];
+      for (var i = 0; i < maxPoints; i++) {
+        var idx = Math.min(Math.round(i * step), arr.length - 1);
+        out.push(arr[idx]);
+      }
+      return out;
+    }
+
+    function renderSummaryVisual(result) {
+      var el = document.getElementById('summaryVisual');
+      if (!el) return;
+      var vs = result && result.visual_summary;
+      var vc = result && result.visual_chart_data;
+      var html = '';
+      if (vs) {
+        var nNorm = vs.normal_n != null ? vs.normal_n : 0;
+        var nOut = vs.outlier_n != null ? vs.outlier_n : 0;
+        var meanNorm = vs.normal_mean_cmax_mg_L != null ? Number(vs.normal_mean_cmax_mg_L).toFixed(4) : '—';
+        var maxNorm = vs.normal_max_cmax_mg_L != null ? Number(vs.normal_max_cmax_mg_L).toFixed(4) : '—';
+        var meanOut = vs.outlier_mean_cmax_mg_L != null ? Number(vs.outlier_mean_cmax_mg_L).toFixed(4) : '—';
+        var maxOut = vs.outlier_max_cmax_mg_L != null ? Number(vs.outlier_max_cmax_mg_L).toFixed(4) : '—';
+        html += '<h3>Visual Summary</h3><table><thead><tr><th>Group</th><th>N</th><th>Mean Cmax (mg/L)</th><th>Max Cmax (mg/L)</th></tr></thead><tbody>';
+        html += '<tr><td>Normal</td><td>' + nNorm + '</td><td>' + meanNorm + '</td><td>' + maxNorm + '</td></tr>';
+        if (nOut > 0) html += '<tr><td>Outlier</td><td>' + nOut + '</td><td>' + meanOut + '</td><td>' + maxOut + '</td></tr>';
+        html += '</tbody></table>';
+      }
+      if (vc && vc.cohort_avg_t_hours && vc.cohort_avg_concentration_mg_L && vc.cohort_avg_t_hours.length) {
+        var maxPts = 18;
+        var tSampled = sampleArray(vc.cohort_avg_t_hours, maxPts);
+        var cohortSampled = sampleArray(vc.cohort_avg_concentration_mg_L, maxPts);
+        var yMax = 10;
+        var tMin = Math.min.apply(null, tSampled);
+        var tMax = Math.max.apply(null, tSampled);
+        if (vc.outlier_concentration_mg_L && vc.outlier_concentration_mg_L.length) {
+          var outSampled = sampleArray(vc.outlier_concentration_mg_L, maxPts);
+          var allVals = cohortSampled.concat(outSampled);
+          yMax = Math.ceil(Math.max.apply(null, allVals) * 1.1 * 10) / 10 || 10;
+          var pid = vc.outlier_patient_id != null ? vc.outlier_patient_id : 'X';
+          html += '<h3>Visual Chart – Concentration Over Time</h3><p class="chart-legend">Outlier (Patient ' + pid + ') vs Cohort average.</p>';
+          html += '<div class="mermaid">xychart\n  title "Concentration (mg/L) vs Time (h)"\n  x-axis "Time (h)" ' + tMin + ' --> ' + tMax + '\n  y-axis "Concentration" 0 --> ' + yMax + '\n  line [' + outSampled.join(', ') + ']\n  line [' + cohortSampled.join(', ') + ']</div>';
+        } else {
+          var allVals = cohortSampled;
+          yMax = Math.ceil(Math.max.apply(null, allVals) * 1.1 * 10) / 10 || 10;
+          html += '<h3>Visual Chart – Concentration Over Time</h3><p class="chart-legend">Cohort average.</p>';
+          html += '<div class="mermaid">xychart\n  title "Concentration (mg/L) vs Time (h)"\n  x-axis "Time (h)" ' + tMin + ' --> ' + tMax + '\n  y-axis "Concentration" 0 --> ' + yMax + '\n  line [' + cohortSampled.join(', ') + ']</div>';
+        }
+      }
+      el.innerHTML = html;
+      if (html && typeof mermaid !== 'undefined') {
+        mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+        el.querySelectorAll('.mermaid').forEach(function(node, i) {
+          var code = node.textContent;
+          node.innerHTML = '';
+          mermaid.render('summary-mermaid-' + i, code).then(function(res) { node.innerHTML = res.svg; }).catch(function() { node.textContent = code; });
+        });
+      }
+    }
+
+    function renderResults(data) {
+      const summary = data.per_patient_summary || [];
+      const outliers = data.outliers || [];
+      const hasResults = summary.length > 0;
+
+      document.getElementById('resultsSection').style.display = hasResults ? 'block' : 'none';
+      document.getElementById('outliersSection').style.display = outliers.length ? 'block' : 'none';
+      document.getElementById('tracesSection').style.display = hasResults ? 'block' : 'none';
+
+      const sumEl = document.getElementById('summaryStats');
+      const cMaxs = summary.map(p => p.c_max_mg_L).filter(x => typeof x === 'number');
+      const avg = cMaxs.length ? (cMaxs.reduce((a, b) => a + b, 0) / cMaxs.length).toFixed(4) : '—';
+      const maxC = cMaxs.length ? Math.max(...cMaxs).toFixed(4) : '—';
+      sumEl.innerHTML = ''
+        + '<span>Cohort size: <strong>' + (data.cohort_size || 0) + '</strong></span>'
+        + '<span>Outliers: <strong>' + (data.num_outliers ?? outliers.length) + '</strong></span>'
+        + '<span>Mean C_max (mg/L): <strong>' + avg + '</strong></span>'
+        + '<span>Max C_max (mg/L): <strong>' + maxC + '</strong></span>';
+
+      if (pkChart) pkChart.destroy();
+      const ctx = document.getElementById('pkChart').getContext('2d');
+      const labels = summary.slice(0, 50).map((_, i) => 'P' + i);
+      const values = summary.slice(0, 50).map(p => p.c_max_mg_L);
+      pkChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'C_max (mg/L)', data: values, backgroundColor: 'rgba(88,166,255,0.6)' }] },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } },
+      });
+
+      const tbody = document.getElementById('outliersBody');
+      tbody.innerHTML = outliers.map(o => `
+        <tr class="outlier-row">
+          <td>${o.patient_id}</td>
+          <td>${Number(o.c_max_mg_L).toFixed(4)}</td>
+          <td class="trace">${escapeHtml((o.param_trace || '').slice(0, 200))}${(o.param_trace || '').length > 200 ? '\u2026' : ''}</td>
+        </tr>
+      `).join('');
+
+      const sample = summary[0];
+      document.getElementById('tracesContent').textContent = sample
+        ? (sample.param_trace || '') + '\n\n' + (sample.pk_reasoning_trace || '')
+        : '';
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

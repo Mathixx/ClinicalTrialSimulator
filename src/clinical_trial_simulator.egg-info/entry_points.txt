@@ -1,0 +1,4 @@
+[console_scripts]
+launch = clinical_trial_simulator.launch:main
+run-trial = clinical_trial_simulator.run_trial:main
+run-trial-from-goal = clinical_trial_simulator.run_trial_from_goal:main

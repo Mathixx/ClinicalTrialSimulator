@@ -1,0 +1,4 @@
+.env
+.venv
+.cursor
+.pytest_cache

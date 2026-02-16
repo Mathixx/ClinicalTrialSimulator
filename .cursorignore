@@ -1,0 +1,10 @@
+.env
+.venv
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.vscode
+.idea
+.DS_Store
+.gitignore
+.gitignore

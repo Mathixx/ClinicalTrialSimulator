@@ -1,0 +1,12 @@
+{
+  "pk_sim_mcp": {
+    "command": "python",
+    "args": ["-m", "pk_sim_mcp"],
+    "cwd": "${workspace_root}"
+  },
+  "pubmed_mcp": {
+    "command": "python",
+    "args": ["-m", "pubmed_mcp"],
+    "cwd": "${workspace_root}"
+  }
+}

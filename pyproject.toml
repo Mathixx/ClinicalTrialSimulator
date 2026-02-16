@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clinical-trial-simulator"
+version = "0.1.0"
+description = "Multi-agent clinical trial simulator with MCP-driven PK simulation and Safety Auditor"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Clinical Trial Simulator" }]
+dependencies = [
+    "pandas>=2.0",
+    "scipy>=1.11",
+    "pydantic>=2.0",
+    "fastmcp>=2.0",
+    "mcp>=1.0",
+    "httpx>=0.25",
+]
+
+[project.optional-dependencies]
+api = ["fastapi>=0.109", "uvicorn[standard]>=0.27"]
+llm = ["openai>=1.0", "python-dotenv>=1.0"]
+dev = ["pytest>=7", "pytest-cov>=4"]
+
+[project.scripts]
+run-trial = "clinical_trial_simulator.run_trial:main"
+run-trial-from-goal = "clinical_trial_simulator.run_trial_from_goal:main"
+launch = "clinical_trial_simulator.launch:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

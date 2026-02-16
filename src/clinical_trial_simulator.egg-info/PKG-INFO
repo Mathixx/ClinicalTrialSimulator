@@ -1,0 +1,75 @@
+Metadata-Version: 2.4
+Name: clinical-trial-simulator
+Version: 0.1.0
+Summary: Multi-agent clinical trial simulator with MCP-driven PK simulation and Safety Auditor
+Author: Clinical Trial Simulator
+License: MIT
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: pandas>=2.0
+Requires-Dist: scipy>=1.11
+Requires-Dist: pydantic>=2.0
+Requires-Dist: fastmcp>=2.0
+Requires-Dist: mcp>=1.0
+Requires-Dist: httpx>=0.25
+Provides-Extra: api
+Requires-Dist: fastapi>=0.109; extra == "api"
+Requires-Dist: uvicorn[standard]>=0.27; extra == "api"
+Provides-Extra: llm
+Requires-Dist: openai>=1.0; extra == "llm"
+Requires-Dist: python-dotenv>=1.0; extra == "llm"
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+Requires-Dist: pytest-cov>=4; extra == "dev"
+
+# Clinical Trial Simulator
+
+Production-grade, multi-agent clinical trial simulator using MCP for PK simulation and Safety Auditor (PubMed). Python 3.11+.
+
+## Setup (uv)
+
+From the repo root:
+
+```bash
+cd ClinicalTrialSimulator
+uv sync --extra api --extra llm
+uv pip install -e ".[api,llm]"
+```
+
+The first line installs dependencies; the second installs the project in editable mode so `uv run launch` (and other entry points) can import it. Copy `.env.example` to `.env` and set `OPENAI_API_KEY` if you use the goal → params / summary pipeline.
+
+## Launch everything at once
+
+Start the API and frontend (MCP servers are spawned by the orchestrator when you run a trial):
+
+```bash
+uv run launch
+```
+
+Then open **http://127.0.0.1:8000**. The frontend shows a single prompt: describe your trial goal (e.g. *"Test 50mg Warfarin on 100 elderly with varying CYP2C9"*). The LLM turns it into params, the orchestrator runs the trial, and an LLM summary is shown. Use **Manual config** at the bottom to run a trial without the LLM.
+
+## Commands (uv)
+
+| Command | Description |
+|--------|-------------|
+| `uv run launch` | Start API + frontend at http://127.0.0.1:8000 |
+| `uv run run-trial --cohort-size 10` | Run one trial with explicit args (no LLM) |
+| `uv run run-trial-from-goal "Test 50mg Warfarin on 50 patients"` | Goal → LLM params → trial → LLM summary |
+
+## Phase 1 (MCP servers, orchestrator)
+
+- **pk-sim-mcp** (standalone): `PYTHONPATH=servers uv run python -m pk_sim_mcp`
+- **pubmed-mcp** (standalone): `PYTHONPATH=servers uv run python -m pubmed_mcp`
+- **Run trial**: `uv run run-trial --cohort-size 10` (orchestrator spawns MCP servers with correct paths)
+
+If the orchestrator hangs, ensure the `mcp` (official SDK) and `fastmcp` packages are protocol-compatible; you can test each server with [MCP Inspector](https://github.com/modelcontextprotocol/inspector).
+
+## LLM pipeline (goal → orchestrator → summary)
+
+- **Setup**: `uv sync --extra api --extra llm` and set `OPENAI_API_KEY` in `.env` (optional: `OPENAI_BASE_URL`, `LLM_MODEL`; default model `gpt-4o-mini`).
+- **CLI**: `uv run run-trial-from-goal "Test 50mg Warfarin on 50 elderly with varying CYP2C9"`
+- **API**: `POST /run_trial_from_goal` with body `{"goal": "..."}` returns `params_used`, `result`, `summary`, `params_reasoning`.
+
+## Config
+
+MCP server commands: `config/mcp_servers.json`. The orchestrator spawns pk-sim-mcp and pubmed-mcp as subprocesses with the correct `PYTHONPATH`; replace `${workspace_root}` with the repo root when editing the config.
