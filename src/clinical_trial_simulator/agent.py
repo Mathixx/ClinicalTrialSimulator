@@ -46,12 +46,19 @@ You are given:
 - An ordered list of planned steps.
 - A set of tools you can call (MCP tools exposed as functions).
 
+Tool-call contract (strict):
+- When you call a tool, the tool's `arguments` MUST be a single, strictly valid JSON object.
+- Use double quotes for all keys and string values. Do not use trailing commas.
+- Do not put JSON inside Markdown fences in the tool call.
+- If you realize your tool arguments are invalid JSON, immediately re-issue the tool call with corrected JSON arguments.
+
 Loop until the trial is complete:
 - Thought: explain briefly what you will do next (1–2 sentences).
 - Action: if needed, call exactly one tool with arguments.
 - Observation: read the tool result, update your mental model, and decide what to do next.
 - Pivot: if observations show toxicity, unexpected values, or feasibility issues, you may deviate from the original plan (e.g., add a safety check).
 - If a tool returns an "error" field (e.g. validation failure), acknowledge it, fix parameters if needed or conclude with a summary; do not ignore it.
+- If a visualization tool returns "visualization_failed" (e.g. timeout or server error), treat it as non-fatal: acknowledge there is nothing to show and continue with the next step or final summary.
 
 When you are done:
 - Stop calling tools.
@@ -163,6 +170,8 @@ async def execute(
     tools = mcp.tool_manifest()
     messages: List[Dict[str, Any]] = _initial_messages(state)
     summary_nudge_sent = False
+    narrated_tool_nudge_count = 0
+    bad_args_nudge_count = 0
     cycle = 0
 
     while not state.is_complete:
@@ -193,6 +202,29 @@ async def execute(
             try:
                 args: Dict[str, Any] = json.loads(fn.arguments or "{}")
             except json.JSONDecodeError:
+                bad_args_nudge_count += 1
+                _react_log(
+                    f"Invalid JSON tool arguments for {full_name}; nudging model to re-issue tool call."
+                )
+                state.add_cycle(
+                    cycle_index=cycle,
+                    thought=content or "(Invalid tool arguments)",
+                    action="nudge",
+                )
+                messages.append({"role": "assistant", "content": content or ""})
+                if bad_args_nudge_count <= 2:
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Your tool call to {full_name} had invalid JSON in `arguments`. "
+                                "Re-issue the tool call NOW using the tool API with strictly valid JSON arguments "
+                                "(double quotes, no trailing commas). Do not reply with only text."
+                            ),
+                        }
+                    )
+                    continue
+                # Defensive fallback after repeated failures: call with empty args.
                 args = {}
 
             _react_log(f"Calling tool: {full_name} (dry_run={dry_run})")
@@ -272,13 +304,40 @@ async def execute(
                     "content": observation_text,
                 }
             )
+            state.add_cycle(
+                cycle_index=cycle,
+                thought=step_thought,
+                action="tool_call",
+                tool_name=full_name,
+                tool_args=args,
+                observation=observation_text,
+            )
             _react_log("Appended assistant + tool result; continuing to next cycle.")
             continue
 
         # No tool calls: treat as final summary only after at least one step.
-        # (If we have zero steps, the model may have narrated instead of calling tools.)
+        # Do not complete if the content looks like the model is describing a tool call (narrated action).
         if len(state.steps) > 0 and content:
+            content_lower = content.lower()
+            narrated = (
+                ("action:" in content_lower and ("call" in content_lower or "invoke" in content_lower))
+                or "i will call" in content_lower
+                or ("let's proceed with" in content_lower and "call" in content_lower)
+            )
+            if narrated and narrated_tool_nudge_count < 2:
+                narrated_tool_nudge_count += 1
+                _react_log("Content looks like a narrated tool call; nudging to use the tool API.", banner=True)
+                state.add_cycle(cycle_index=cycle, thought=content, action="nudge")
+                messages.append({"role": "assistant", "content": content})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "You described calling a tool. Please use the function/tool API to call it now — do not reply with only text.",
+                    }
+                )
+                continue
             _react_log(f"Completing with summary ({len(content)} chars)", banner=True)
+            state.add_cycle(cycle_index=cycle, thought=content, action="complete")
             state.complete(content)
             if progress_callback:
                 progress_callback(
@@ -295,6 +354,7 @@ async def execute(
         if len(state.steps) == 0:
             # Model replied with text only; may have described a tool call instead of using the API.
             _react_log("No steps yet and no tool_calls: nudging to use tool API.")
+            state.add_cycle(cycle_index=cycle, thought=content or "(No response)", action="nudge")
             messages.append({"role": "assistant", "content": content or "(No response)"})
             messages.append(
                 {
@@ -309,6 +369,7 @@ async def execute(
         if len(state.steps) > 0 and not content and not summary_nudge_sent:
             _react_log("Empty content after tool run: nudging for final summary.", banner=True)
             summary_nudge_sent = True
+            state.add_cycle(cycle_index=cycle, thought="", action="summary_nudge")
             messages.append({"role": "assistant", "content": ""})
             messages.append(
                 {
@@ -320,6 +381,11 @@ async def execute(
 
         # Defensive: empty response after some steps (and we already nudged for summary).
         _react_log("Defensive exit: empty response after steps (summary nudge already sent).", banner=True)
+        state.add_cycle(
+            cycle_index=cycle,
+            thought=content or "Execution stopped due to empty LLM response.",
+            action="defensive_exit",
+        )
         state.complete(content or "Execution stopped due to empty LLM response.")
         break
 

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class Step(BaseModel):
-    """One iteration of the ReAct loop."""
+    """One tool-call step in the ReAct loop."""
 
     thought: str = Field("", description="Why the agent chose this action.")
     tool_name: Optional[str] = Field(
@@ -22,6 +22,20 @@ class Step(BaseModel):
     timestamp: datetime = Field(
         default_factory=datetime.utcnow, description="When this step was created."
     )
+
+
+class ReActCycle(BaseModel):
+    """One full ReAct cycle (every LLM turn + what we did)."""
+
+    cycle_index: int = Field(..., description="1-based cycle number.")
+    thought: str = Field("", description="LLM content for this turn.")
+    action: str = Field(
+        ...,
+        description="One of: tool_call, nudge, summary_nudge, complete, defensive_exit.",
+    )
+    tool_name: Optional[str] = Field(default=None, description="Tool called (if action=tool_call).")
+    tool_args: Dict[str, Any] = Field(default_factory=dict, description="Tool arguments (if action=tool_call).")
+    observation: str = Field("", description="Tool result (if action=tool_call).")
 
 
 class TrialProtocol(BaseModel):
@@ -39,6 +53,10 @@ class TrialState(BaseModel):
 
     protocol: TrialProtocol
     steps: List[Step] = Field(default_factory=list)
+    cycles: List[ReActCycle] = Field(
+        default_factory=list,
+        description="Every ReAct cycle (nudges, tool calls, completions) for the Developers view.",
+    )
     results: Dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary structured results accumulated during execution.",
@@ -66,6 +84,27 @@ class TrialState(BaseModel):
         )
         self.steps.append(step)
         return step
+
+    def add_cycle(
+        self,
+        cycle_index: int,
+        thought: str,
+        action: str,
+        *,
+        tool_name: Optional[str] = None,
+        tool_args: Optional[Dict[str, Any]] = None,
+        observation: str = "",
+    ) -> ReActCycle:
+        cycle = ReActCycle(
+            cycle_index=cycle_index,
+            thought=thought,
+            action=action,
+            tool_name=tool_name,
+            tool_args=tool_args or {},
+            observation=observation,
+        )
+        self.cycles.append(cycle)
+        return cycle
 
     def complete(self, summary: str) -> None:
         self.is_complete = True

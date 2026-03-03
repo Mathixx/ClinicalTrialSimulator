@@ -266,10 +266,30 @@
 
     let pollInterval = null;
 
+    function clearPreviousRun() {
+      var sections = ['paramsSection', 'summarySection', 'resultsSection', 'outliersSection', 'tracesSection', 'developersSection'];
+      sections.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) { el.style.display = 'none'; }
+      });
+      var summaryText = document.getElementById('summaryText');
+      var summaryVisual = document.getElementById('summaryVisual');
+      if (summaryText) { summaryText.textContent = ''; summaryText.innerHTML = ''; }
+      if (summaryVisual) { summaryVisual.innerHTML = ''; }
+      document.getElementById('paramsUsed').textContent = '';
+      document.getElementById('paramsReasoning').textContent = '';
+      document.getElementById('developersSteps').innerHTML = '';
+      document.getElementById('summaryStats').innerHTML = '';
+      document.getElementById('outliersBody').innerHTML = '';
+      document.getElementById('tracesContent').textContent = '';
+      if (pkChart) { pkChart.destroy(); pkChart = null; }
+    }
+
     document.getElementById('runFromGoalBtn').addEventListener('click', async () => {
       const btn = document.getElementById('runFromGoalBtn');
       const goal = document.getElementById('goalPrompt').value.trim()
         || 'Test 50mg Warfarin on 50 elderly patients with varying CYP2C9. Flag C_max above 3 mg/L.';
+      clearPreviousRun();
       btn.disabled = true;
       document.getElementById('stepDisplay').style.display = 'flex';
       document.getElementById('stepText').textContent = 'Starting…';
@@ -465,22 +485,44 @@
     }
 
     function renderDevelopersSteps(state) {
+      const cycles = state && Array.isArray(state.cycles) ? state.cycles : [];
       const steps = state && Array.isArray(state.steps) ? state.steps : [];
       const section = document.getElementById('developersSection');
       const container = document.getElementById('developersSteps');
       if (!section || !container) return;
-      if (steps.length === 0) {
+      const items = cycles.length ? cycles : steps;
+      if (items.length === 0) {
         section.style.display = 'none';
         container.innerHTML = '';
         return;
       }
       section.style.display = 'block';
-      container.innerHTML = steps.map(function(s, i) {
-        var thought = (s.thought != null && s.thought !== undefined) ? String(s.thought).trim() : '';
-        var toolName = (s.tool_name != null && s.tool_name !== undefined) ? String(s.tool_name) : '';
-        var toolArgs = s.tool_args && typeof s.tool_args === 'object' ? JSON.stringify(s.tool_args, null, 2) : '';
-        var obs = (s.observation != null && s.observation !== undefined) ? String(s.observation).trim() : '';
-        if (!thought && toolName) thought = 'Decision: invoke ' + toolName + '.';
+      var useCycles = cycles.length > 0;
+      container.innerHTML = items.map(function(item, i) {
+        var thought, toolName, toolArgs, obs, actionLabel;
+        if (useCycles) {
+          var c = item;
+          thought = (c.thought != null && c.thought !== undefined) ? String(c.thought).trim() : '';
+          toolName = (c.tool_name != null && c.tool_name !== undefined) ? String(c.tool_name) : '';
+          toolArgs = c.tool_args && typeof c.tool_args === 'object' ? JSON.stringify(c.tool_args, null, 2) : '';
+          obs = (c.observation != null && c.observation !== undefined) ? String(c.observation).trim() : '';
+          var action = (c.action != null && c.action !== undefined) ? String(c.action) : '';
+          var cycleIdx = (c.cycle_index != null && c.cycle_index !== undefined) ? c.cycle_index : (i + 1);
+          if (action === 'nudge') actionLabel = 'Nudge: use tool API';
+          else if (action === 'summary_nudge') actionLabel = 'Nudge: request final summary';
+          else if (action === 'complete') actionLabel = 'Complete with summary';
+          else if (action === 'defensive_exit') actionLabel = 'Defensive exit';
+          else if (action === 'tool_call') actionLabel = 'Tool call';
+          else actionLabel = action || '—';
+          thought = (cycleIdx ? 'Cycle ' + cycleIdx + ' · ' + actionLabel + '\n\n' : '') + thought;
+        } else {
+          var s = item;
+          thought = (s.thought != null && s.thought !== undefined) ? String(s.thought).trim() : '';
+          toolName = (s.tool_name != null && s.tool_name !== undefined) ? String(s.tool_name) : '';
+          toolArgs = s.tool_args && typeof s.tool_args === 'object' ? JSON.stringify(s.tool_args, null, 2) : '';
+          obs = (s.observation != null && s.observation !== undefined) ? String(s.observation).trim() : '';
+          if (!thought && toolName) thought = 'Decision: invoke ' + toolName + '.';
+        }
         var obsContent = obs ? formatObservationHtml(obs) : '';
         var hasImg = obsContent.indexOf('dev-observation-img') !== -1;
         var obsHtml = obs ? ('<div class="dev-observation' + (hasImg ? ' dev-observation-with-img' : '') + '"><strong>Observation:</strong> ' + obsContent + '</div>') : '';

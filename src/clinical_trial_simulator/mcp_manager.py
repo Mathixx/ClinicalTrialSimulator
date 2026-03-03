@@ -13,8 +13,19 @@ from .schemas import ToolDef
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _CONFIG_PATH = _REPO_ROOT / "config" / "mcp_servers.json"
 _MCP_INIT_TIMEOUT_SECONDS = 20.0
-# Viz (matplotlib) and PK sims can be slow; avoid closing the pipe before the server responds.
+# PK/safety/recruitment can be slow; avoid closing the pipe before the server responds.
 _MCP_CALL_TOOL_TIMEOUT_SECONDS = 300.0
+# Visualization tools get a shorter limit so the run does not stall on slow plots.
+_MCP_VIZ_CALL_TIMEOUT_SECONDS = 45.0
+
+_VIZ_FAILED_MOCK_OBSERVATION = {
+    "visualization_failed": True,
+    "message": (
+        "Visualization did not complete in time (or failed). "
+        "Please ignore this failure; it is okay if there is nothing to show to the user. "
+        "Continue with your summary."
+    ),
+}
 
 
 def _load_mcp_config() -> Dict[str, Dict[str, Any]]:
@@ -194,6 +205,9 @@ class MCPManager:
         server, _ = self._parse_tool_name(full_name)
         return server
 
+    def _is_viz_tool(self, server_name: str) -> bool:
+        return server_name == "viz_mcp"
+
     async def call_tool(self, full_name: str, arguments: Dict[str, Any]) -> Any:
         """Call a tool by its fully-qualified name 'server_tool' or 'server.tool' and return JSON."""
         server_name, tool_name = self._parse_tool_name(full_name)
@@ -202,17 +216,34 @@ class MCPManager:
         if session is None:
             raise ValueError(f"Unknown MCP server: {server_name}")
 
+        timeout = (
+            _MCP_VIZ_CALL_TIMEOUT_SECONDS
+            if self._is_viz_tool(server_name)
+            else _MCP_CALL_TOOL_TIMEOUT_SECONDS
+        )
         try:
             result = await asyncio.wait_for(
                 session.call_tool(tool_name, arguments=arguments),
-                timeout=_MCP_CALL_TOOL_TIMEOUT_SECONDS,
+                timeout=timeout,
             )
         except asyncio.TimeoutError:
+            if self._is_viz_tool(server_name):
+                return dict(_VIZ_FAILED_MOCK_OBSERVATION)
             raise TimeoutError(
-                f"Tool {full_name} did not respond within {_MCP_CALL_TOOL_TIMEOUT_SECONDS}s. "
+                f"Tool {full_name} did not respond within {timeout}s. "
                 "The MCP server may have hung or crashed."
             ) from None
-        return _extract_tool_result(result)
+        except Exception as e:
+            if self._is_viz_tool(server_name):
+                return dict(_VIZ_FAILED_MOCK_OBSERVATION)
+            raise
+
+        try:
+            return _extract_tool_result(result)
+        except Exception as e:
+            if self._is_viz_tool(server_name):
+                return dict(_VIZ_FAILED_MOCK_OBSERVATION)
+            raise
 
     def _resolve_short_name(self, short_name: str) -> Tuple[str, str]:
         matches = [t for t in self._tools if t.name == short_name]
