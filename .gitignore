@@ -1,6 +1,27 @@
+# Environment & Secrets
 .env
-.venv
-.cursor
-.pytest_cache
+.venv/
+env/
+venv/
+
+# Build & Distribution
 build/
+dist/
+*.egg-info/
+.eggs/
+
+# Editor & Tools
+.cursor/
+.vscode/
+.idea/
+
+# Cache & Testing
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.pwc/
+
+# Dependency Management
+# NOTE: Keeping uv.lock is usually recommended for apps, 
+# but I've included it here since you requested it.
 uv.lock

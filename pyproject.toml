@@ -13,6 +13,7 @@ authors = [{ name = "Clinical Trial Simulator" }]
 dependencies = [
     "pandas>=2.0",
     "scipy>=1.11",
+    "matplotlib>=3.8",
     "pydantic>=2.0",
     "fastmcp>=2.0",
     "mcp>=1.0",
@@ -25,8 +26,7 @@ llm = ["openai>=1.0", "python-dotenv>=1.0"]
 dev = ["pytest>=7", "pytest-cov>=4"]
 
 [project.scripts]
-run-trial = "clinical_trial_simulator.run_trial:main"
-run-trial-from-goal = "clinical_trial_simulator.run_trial_from_goal:main"
+run-trial = "clinical_trial_simulator.orchestrator:main"
 launch = "clinical_trial_simulator.launch:main"
 
 [tool.setuptools.packages.find]
@@ -35,3 +35,9 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=7",
+    "pytest-cov>=4",
+]

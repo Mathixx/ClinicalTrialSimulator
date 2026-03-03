@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class Step(BaseModel):
+    """One iteration of the ReAct loop."""
+
+    thought: str = Field("", description="Why the agent chose this action.")
+    tool_name: Optional[str] = Field(
+        default=None, description="Name of the tool that was called (if any)."
+    )
+    tool_args: Dict[str, Any] = Field(
+        default_factory=dict, description="Arguments passed to the tool."
+    )
+    observation: str = Field(
+        "", description="Serialized observation returned from the tool."
+    )
+    timestamp: datetime = Field(
+        default_factory=datetime.utcnow, description="When this step was created."
+    )
+
+
+class TrialProtocol(BaseModel):
+    """Planner output: high-level protocol for the trial."""
+
+    goal: str = Field(..., description="Original natural-language goal from the user.")
+    planned_steps: List[str] = Field(
+        default_factory=list,
+        description="High-level steps the planner thinks should be executed in order.",
+    )
+
+
+class TrialState(BaseModel):
+    """Evolving state for a single trial run."""
+
+    protocol: TrialProtocol
+    steps: List[Step] = Field(default_factory=list)
+    results: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Arbitrary structured results accumulated during execution.",
+    )
+    is_complete: bool = Field(
+        False, description="Whether the agent considers the trial finished."
+    )
+    summary: Optional[str] = Field(
+        default=None,
+        description="Final narrative summary from the agent once the trial is complete.",
+    )
+
+    def add_step(
+        self,
+        thought: str,
+        tool_name: Optional[str],
+        tool_args: Dict[str, Any],
+        observation: str,
+    ) -> Step:
+        step = Step(
+            thought=thought,
+            tool_name=tool_name,
+            tool_args=tool_args,
+            observation=observation,
+        )
+        self.steps.append(step)
+        return step
+
+    def complete(self, summary: str) -> None:
+        self.is_complete = True
+        self.summary = summary
+
+
+class ToolDef(BaseModel):
+    """Tool metadata exposed to the planner / executor."""
+
+    name: str
+    server: str
+    description: str
+    parameters: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="JSON-schema-like parameters definition for LLM tool calling.",
+    )
+

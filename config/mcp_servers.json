@@ -4,9 +4,19 @@
     "args": ["-m", "pk_sim_mcp"],
     "cwd": "${workspace_root}"
   },
-  "pubmed_mcp": {
+  "safety_mcp": {
     "command": "python",
-    "args": ["-m", "pubmed_mcp"],
+    "args": ["-m", "safety_mcp"],
+    "cwd": "${workspace_root}"
+  },
+  "recruitment_mcp": {
+    "command": "python",
+    "args": ["-m", "recruitment_mcp"],
+    "cwd": "${workspace_root}"
+  },
+  "viz_mcp": {
+    "command": "python",
+    "args": ["-m", "viz_mcp"],
     "cwd": "${workspace_root}"
   }
 }

@@ -50,15 +50,27 @@
     .params-used { font-size: 0.875rem; color: var(--muted); margin: 0.5rem 0; }
     .toggle-section { margin-top: 0.75rem; }
     .toggle-section summary { cursor: pointer; color: var(--accent); }
-    .step-display { display: flex; align-items: center; gap: 0.75rem; margin: 0.75rem 0; padding: 0.75rem; background: rgba(88,166,255,0.08); border-radius: 6px; }
+    .step-display { display: flex; align-items: flex-start; gap: 0.75rem; margin: 0.75rem 0; padding: 0.75rem; background: rgba(88,166,255,0.08); border-radius: 6px; }
     .step-display .spinner { width: 20px; height: 20px; border: 2px solid var(--muted); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .step-display .step-text { color: var(--text); font-size: 0.9375rem; }
+    .step-meta { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+    .step-thought { color: var(--muted); font-size: 0.8125rem; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .tool-badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.15rem 0.5rem; border-radius: 999px; border: 1px solid #30363d; font-size: 0.75rem; width: fit-content; }
+    .tool-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); }
     .example-queries { margin-bottom: 0.75rem; }
     .example-queries span { font-size: 0.8125rem; color: var(--muted); display: block; margin-bottom: 0.5rem; }
     .example-queries .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
     .example-queries .chip { font-size: 0.8125rem; padding: 0.35rem 0.65rem; border-radius: 999px; border: 1px solid #30363d; background: var(--bg); color: var(--muted); cursor: pointer; transition: border-color 0.15s, color 0.15s; }
     .example-queries .chip:hover { border-color: var(--accent); color: var(--accent); }
+    #developersSteps .dev-step { margin-bottom: 1.25rem; padding: 0.75rem 1rem; background: var(--bg); border-radius: 6px; border-left: 3px solid var(--accent); }
+    #developersSteps .dev-step .dev-thought { color: var(--text); font-size: 0.875rem; margin-bottom: 0.5rem; white-space: pre-wrap; }
+    #developersSteps .dev-step .dev-tool { font-size: 0.8125rem; color: var(--accent); margin-bottom: 0.35rem; }
+    #developersSteps .dev-step .dev-args { font-size: 0.75rem; color: var(--muted); font-family: ui-monospace, monospace; margin-bottom: 0.5rem; max-height: 6em; overflow-y: auto; }
+    #developersSteps .dev-step .dev-observation { font-size: 0.75rem; color: var(--muted); white-space: pre-wrap; word-break: break-word; max-height: 8em; overflow-y: auto; }
+    #developersSteps .dev-step .dev-observation.dev-observation-with-img { max-height: none; }
+    #developersSteps .dev-step .dev-observation-img { margin-top: 0.5rem; max-width: 100%; max-height: 280px; border-radius: 6px; border: 1px solid #30363d; display: block; }
+    #developersSteps .dev-step .dev-observation-desc { margin-bottom: 0.35rem; }
   </style>
 </head>
 <body>
@@ -82,7 +94,14 @@
     </div>
     <div id="stepDisplay" class="step-display" style="display: none;">
       <div class="spinner"></div>
-      <span class="step-text" id="stepText"></span>
+      <div class="step-meta">
+        <span class="step-text" id="stepText"></span>
+        <div id="toolBadge" class="tool-badge" style="display: none;">
+          <span id="toolDot" class="tool-dot"></span>
+          <span id="toolLabel"></span>
+        </div>
+        <div class="step-thought" id="stepThought" style="display: none;"></div>
+      </div>
     </div>
     <div id="status"></div>
   </section>
@@ -94,7 +113,7 @@
   </section>
 
   <section id="summarySection" style="display: none;">
-    <h2>Summary</h2>
+    <h2>Summary (final result only)</h2>
     <div id="summaryText" class="summary-text"></div>
     <div id="summaryVisual" class="summary-visual"></div>
   </section>
@@ -116,6 +135,12 @@
   <section id="tracesSection" style="display: none;">
     <h2>Reasoning traces (sample)</h2>
     <div id="tracesContent" class="trace"></div>
+  </section>
+
+  <section id="developersSection" style="display: none;">
+    <h2>Developers</h2>
+    <p style="color: var(--muted); font-size: 0.875rem; margin: 0 0 0.75rem;">ReAct loop: thought and decision (tool use) for each iteration.</p>
+    <div id="developersSteps"></div>
   </section>
 
   <section class="toggle-section">
@@ -155,12 +180,20 @@
       el.style.color = isError ? 'var(--danger)' : 'var(--muted)';
     }
 
-    function showParams(params, reasoning) {
+    function showParams(protocol, _reasoning) {
       document.getElementById('paramsSection').style.display = 'block';
-      const parts = params ? ['drug: ' + params.drug, 'dose_mg: ' + params.dose_mg, 'cohort_size: ' + params.cohort_size, 'frequency: ' + params.frequency, 'c_max_threshold_mg_L: ' + params.c_max_threshold_mg_L] : [];
-      if (params && params.cohort_distribution) parts.push('cohort: ' + params.cohort_distribution);
+      if (!protocol) {
+        document.getElementById('paramsUsed').textContent = '';
+        document.getElementById('paramsReasoning').textContent = '';
+        return;
+      }
+      const parts = [];
+      if (protocol.goal) parts.push('goal: ' + protocol.goal);
+      if (protocol.planned_steps && protocol.planned_steps.length) {
+        parts.push('planned steps: ' + protocol.planned_steps.join(' | '));
+      }
       document.getElementById('paramsUsed').textContent = parts.join('  ·  ') || '';
-      document.getElementById('paramsReasoning').textContent = reasoning || '';
+      document.getElementById('paramsReasoning').textContent = '';
     }
 
     function markdownToHtml(md) {
@@ -206,10 +239,16 @@
     function showSummary(text) {
       const el = document.getElementById('summaryText');
       const section = document.getElementById('summarySection');
-      section.style.display = 'block';
       var s = (text != null && text !== undefined) ? String(text).trim() : '';
       var visualEl = document.getElementById('summaryVisual');
-      if (!s) { el.textContent = ''; el.innerHTML = ''; if (visualEl) visualEl.innerHTML = ''; return; }
+      if (!s) {
+        el.textContent = '';
+        el.innerHTML = '';
+        if (visualEl) visualEl.innerHTML = '';
+        section.style.display = 'none';
+        return;
+      }
+      section.style.display = 'block';
       try {
         el.innerHTML = markdownToHtml(s);
         if (typeof mermaid !== 'undefined') {
@@ -234,6 +273,8 @@
       btn.disabled = true;
       document.getElementById('stepDisplay').style.display = 'flex';
       document.getElementById('stepText').textContent = 'Starting…';
+      document.getElementById('toolBadge').style.display = 'none';
+      document.getElementById('stepThought').style.display = 'none';
       showStatus('');
       try {
         const res = await fetch(API_BASE + '/run_trial_from_goal', {
@@ -246,23 +287,54 @@
           try {
             const st = await fetch(API_BASE + '/run_trial_status').then(r => r.json());
             document.getElementById('stepText').textContent = st.step || st.status;
+
+            // ReAct telemetry: current thought + tool badge
+            var agent = st.agent || null;
+            var toolBadge = document.getElementById('toolBadge');
+            var toolDot = document.getElementById('toolDot');
+            var toolLabel = document.getElementById('toolLabel');
+            var stepThought = document.getElementById('stepThought');
+
+            function serverColor(server) {
+              if (!server) return 'var(--muted)';
+              if (server.indexOf('pk_sim_mcp') === 0) return 'var(--accent)';
+              if (server.indexOf('safety_mcp') === 0) return 'var(--danger)';
+              if (server.indexOf('recruitment_mcp') === 0) return '#b392f0';
+              if (server.indexOf('viz_mcp') === 0) return '#3fb950';
+              return 'var(--muted)';
+            }
+
+            if (agent && agent.tool) {
+              toolBadge.style.display = 'inline-flex';
+              toolLabel.textContent = String(agent.tool);
+              var c = serverColor(String(agent.server || ''));
+              toolDot.style.background = c;
+              toolBadge.style.borderColor = c;
+            } else {
+              toolBadge.style.display = 'none';
+            }
+
+            if (agent && agent.thought) {
+              stepThought.style.display = 'block';
+              stepThought.textContent = String(agent.thought).trim();
+            } else {
+              stepThought.style.display = 'none';
+            }
             if (st.status === 'done') {
               clearInterval(pollInterval);
               pollInterval = null;
               document.getElementById('stepDisplay').style.display = 'none';
-              const data = st.result || {};
-              const result = data.result || {};
+              const state = st.result && st.result.state ? st.result.state : st.result || {};
               var summary = (st.summary != null && st.summary !== undefined) ? String(st.summary).trim() : '';
-              if (!summary && (data.summary != null && data.summary !== undefined)) summary = String(data.summary).trim();
-              if (!summary && result.num_outliers != null) {
-                summary = 'Trial completed with ' + (result.num_outliers || 0) + ' outlier(s). Summary text was not returned.';
+              if (!summary && state && state.summary != null && state.summary !== undefined) {
+                summary = String(state.summary).trim();
               }
-              showParams(data.params_used, data.params_reasoning);
+              showParams(state.protocol, null);
               showSummary(summary);
-              renderResults(result);
-              renderSummaryVisual(result);
-              if (result.error) showStatus(result.error, true);
-              else showStatus('Done. ' + (result.num_outliers || 0) + ' outlier(s).');
+              renderResultsFromState(state);
+              renderDevelopersSteps(state);
+              if (st.error || state.error) showStatus(st.error || state.error, true);
+              else showStatus('Done.', false);
               btn.disabled = false;
             } else if (st.status === 'error') {
               clearInterval(pollInterval);
@@ -299,13 +371,14 @@
         });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
-        showParams(null, null);
+        const state = data && data.state ? data.state : data;
+        showParams(state.protocol, null);
         document.getElementById('paramsSection').style.display = 'none';
         showSummary('');
-        document.getElementById('summarySection').style.display = 'none';
-        renderResults(data);
-        renderSummaryVisual(data);
-        manualStatus.textContent = 'Done. ' + (data.num_outliers || 0) + ' outlier(s).';
+        document.getElementById('summarySection').style.display = state && state.summary ? 'block' : 'none';
+        if (state && state.summary) showSummary(state.summary);
+        renderResultsFromState(state);
+        manualStatus.textContent = 'Done.';
       } catch (e) {
         manualStatus.textContent = 'Error: ' + e.message;
         manualStatus.style.color = 'var(--danger)';
@@ -324,11 +397,11 @@
       return out;
     }
 
-    function renderSummaryVisual(result) {
+    function renderSummaryVisualFromState(state) {
       var el = document.getElementById('summaryVisual');
       if (!el) return;
-      var vs = result && result.visual_summary;
-      var vc = result && result.visual_chart_data;
+      var vs = state && state.visual_summary;
+      var vc = state && state.visual_chart_data;
       var html = '';
       if (vs) {
         var nNorm = vs.normal_n != null ? vs.normal_n : 0;
@@ -374,9 +447,55 @@
       }
     }
 
-    function renderResults(data) {
-      const summary = data.per_patient_summary || [];
-      const outliers = data.outliers || [];
+    function formatObservationHtml(obs) {
+      if (!obs || typeof obs !== 'string') return '';
+      var s = obs.trim();
+      if (!s) return '';
+      try {
+        var data = JSON.parse(s);
+        if (data && typeof data.image_base64_png === 'string' && data.image_base64_png.length > 0) {
+          var desc = (data.description != null && data.description !== undefined) ? String(data.description).trim() : '';
+          var b64 = data.image_base64_png;
+          return '<div class="dev-observation-desc">' + escapeHtml(desc || 'Image') + '</div>' +
+            '<img class="dev-observation-img" src="data:image/png;base64,' + b64 + '" alt="PK curve" loading="lazy" />';
+        }
+      } catch (_) {}
+      if (s.length > 2000) s = s.slice(0, 2000) + '…';
+      return escapeHtml(s);
+    }
+
+    function renderDevelopersSteps(state) {
+      const steps = state && Array.isArray(state.steps) ? state.steps : [];
+      const section = document.getElementById('developersSection');
+      const container = document.getElementById('developersSteps');
+      if (!section || !container) return;
+      if (steps.length === 0) {
+        section.style.display = 'none';
+        container.innerHTML = '';
+        return;
+      }
+      section.style.display = 'block';
+      container.innerHTML = steps.map(function(s, i) {
+        var thought = (s.thought != null && s.thought !== undefined) ? String(s.thought).trim() : '';
+        var toolName = (s.tool_name != null && s.tool_name !== undefined) ? String(s.tool_name) : '';
+        var toolArgs = s.tool_args && typeof s.tool_args === 'object' ? JSON.stringify(s.tool_args, null, 2) : '';
+        var obs = (s.observation != null && s.observation !== undefined) ? String(s.observation).trim() : '';
+        if (!thought && toolName) thought = 'Decision: invoke ' + toolName + '.';
+        var obsContent = obs ? formatObservationHtml(obs) : '';
+        var hasImg = obsContent.indexOf('dev-observation-img') !== -1;
+        var obsHtml = obs ? ('<div class="dev-observation' + (hasImg ? ' dev-observation-with-img' : '') + '"><strong>Observation:</strong> ' + obsContent + '</div>') : '';
+        return '<div class="dev-step" data-step="' + (i + 1) + '">' +
+          (thought ? '<div class="dev-thought"><strong>Thought:</strong> ' + escapeHtml(thought) + '</div>' : '') +
+          (toolName ? '<div class="dev-tool"><strong>Tool:</strong> ' + escapeHtml(toolName) + '</div>' : '') +
+          (toolArgs ? '<div class="dev-args"><strong>Arguments:</strong><pre>' + escapeHtml(toolArgs) + '</pre></div>' : '') +
+          obsHtml +
+          '</div>';
+      }).join('');
+    }
+
+    function renderResultsFromState(state) {
+      const summary = state && Array.isArray(state.steps) ? state.steps : [];
+      const outliers = state && state.results && Array.isArray(state.results.outliers) ? state.results.outliers : [];
       const hasResults = summary.length > 0;
 
       document.getElementById('resultsSection').style.display = hasResults ? 'block' : 'none';
@@ -384,37 +503,32 @@
       document.getElementById('tracesSection').style.display = hasResults ? 'block' : 'none';
 
       const sumEl = document.getElementById('summaryStats');
-      const cMaxs = summary.map(p => p.c_max_mg_L).filter(x => typeof x === 'number');
-      const avg = cMaxs.length ? (cMaxs.reduce((a, b) => a + b, 0) / cMaxs.length).toFixed(4) : '—';
-      const maxC = cMaxs.length ? Math.max(...cMaxs).toFixed(4) : '—';
       sumEl.innerHTML = ''
-        + '<span>Cohort size: <strong>' + (data.cohort_size || 0) + '</strong></span>'
-        + '<span>Outliers: <strong>' + (data.num_outliers ?? outliers.length) + '</strong></span>'
-        + '<span>Mean C_max (mg/L): <strong>' + avg + '</strong></span>'
-        + '<span>Max C_max (mg/L): <strong>' + maxC + '</strong></span>';
+        + '<span>Steps: <strong>' + summary.length + '</strong></span>'
+        + '<span>Outliers: <strong>' + outliers.length + '</strong></span>';
 
       if (pkChart) pkChart.destroy();
       const ctx = document.getElementById('pkChart').getContext('2d');
-      const labels = summary.slice(0, 50).map((_, i) => 'P' + i);
-      const values = summary.slice(0, 50).map(p => p.c_max_mg_L);
+      const labels = summary.slice(0, 50).map((_, i) => 'Step ' + (i + 1));
+      const values = summary.slice(0, 50).map(s => s.tool_name ? 1 : 0);
       pkChart = new Chart(ctx, {
         type: 'bar',
-        data: { labels, datasets: [{ label: 'C_max (mg/L)', data: values, backgroundColor: 'rgba(88,166,255,0.6)' }] },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } },
+        data: { labels, datasets: [{ label: 'Tool call (1=yes)', data: values, backgroundColor: 'rgba(88,166,255,0.6)' }] },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 1 } } },
       });
 
       const tbody = document.getElementById('outliersBody');
       tbody.innerHTML = outliers.map(o => `
         <tr class="outlier-row">
-          <td>${o.patient_id}</td>
-          <td>${Number(o.c_max_mg_L).toFixed(4)}</td>
-          <td class="trace">${escapeHtml((o.param_trace || '').slice(0, 200))}${(o.param_trace || '').length > 200 ? '\u2026' : ''}</td>
+          <td>${escapeHtml(String(o.patient_index ?? '?'))}</td>
+          <td>${Number(o.Cmax_mg_L ?? 0).toFixed(4)}</td>
+          <td class="trace">${escapeHtml((o.reasons || []).join('; '))}</td>
         </tr>
       `).join('');
 
-      const sample = summary[0];
+      const sample = summary[summary.length - 1];
       document.getElementById('tracesContent').textContent = sample
-        ? (sample.param_trace || '') + '\n\n' + (sample.pk_reasoning_trace || '')
+        ? (sample.thought || '') + '\n\n' + (sample.observation || '')
         : '';
     }
 
